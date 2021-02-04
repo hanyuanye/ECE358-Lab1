@@ -4,6 +4,8 @@
 #include <math.h>
 #include <vector>
 #include <deque>
+#include <functional>
+#include <algorithm>
 
 enum EventType { ARRIVAL, DEPARTURE, OBSERVER };
 
@@ -31,13 +33,27 @@ public:
     }
 };
 
+struct Result {
+    double packetLoss;
+    double queueSizeTotal;
+    double idleTimeTotal;
+
+    Result() {
+        packetLoss = 0;
+        queueSizeTotal = 0;
+        idleTimeTotal = 0;
+    };
+};
+
 double startRho = 0.25;
 double endRho = 0.95;
 double incrementRho = 0.10;
-double lengthRatio = 0.002;
-double T = 1000;
-double arrivalLambda = 75;
-double lengthLambda = 0;
+double arrivalRatio = 500;
+double T = 5000;
+double queueSize = 10;
+double arrivalLambda = 0;
+double lengthLambda = 0.0005;
+double c = 1000000;
 std::default_random_engine generator;
 std::uniform_real_distribution<double> distribution(0.0, 1.0);
 
@@ -51,13 +67,11 @@ std::vector<Event> generateArrivals(int simulationTime) {
     std::vector<Event> arrivalEvents;
     while (currTime < simulationTime) {
         double nextArrival = exponentialValue(arrivalLambda, distribution(generator));
-        double serviceTime = exponentialValue(lengthLambda, distribution(generator));
+        double serviceTime = exponentialValue(lengthLambda, distribution(generator)) / c;
         Event newEvent(nextArrival + currTime, serviceTime, ARRIVAL);
-        arrivalEvents.push_back(Event(nextArrival + currTime, serviceTime, ARRIVAL));
+        arrivalEvents.push_back(newEvent);
         currTime = nextArrival + currTime;
      }
-
-    std::cout << arrivalEvents.size() << std::endl;
 
     return arrivalEvents;
 }
@@ -129,6 +143,62 @@ std::vector<Event> generateDepartures(std::vector<Event> arrivals, int simulatio
     return departures;
 }
 
+std::vector<Event>generateObservers(int simulationTime) {
+    double currTime = 0;
+
+    std::vector<Event> observerEvents;
+    while (currTime < simulationTime) {
+        double nextArrival = exponentialValue(arrivalLambda*5.0, distribution(generator));
+        Event newEvent(nextArrival + currTime, OBSERVER);
+        observerEvents.push_back(newEvent);
+        currTime = nextArrival + currTime;
+     }
+
+    return observerEvents; 
+}
+
+Result runDes(std::vector<Event> events, int simulationTime, int size) {
+    std::deque<Event> queue;
+
+    for (auto e: events) {
+        queue.push_back(e);
+    }
+
+    Result result;
+    int currentQueueSize = 0;
+    double previousTime = 0;
+
+    while (queue.size() > 0) {
+        auto event = queue.front();
+        queue.pop_front();
+
+        if (event.timestamp >= simulationTime) { break; }
+
+        switch (event.type) {
+        case ARRIVAL:
+            if (size > 0 && currentQueueSize == size) {
+                result.packetLoss += 1;
+            } else {
+                currentQueueSize += 1;
+            }
+            break;
+        case DEPARTURE:
+            currentQueueSize -= 1;
+            break;
+        case OBSERVER:
+            result.queueSizeTotal += currentQueueSize;
+            if (currentQueueSize == 0) {
+                result.idleTimeTotal += event.timestamp - previousTime;
+            }
+            break;
+        }
+
+        previousTime = event.timestamp; 
+    }
+
+    return result;
+}
+
 int main() {
 
     std::cout << "hello world" << std::endl;
@@ -136,13 +206,23 @@ int main() {
     double rho = startRho;
 
     while (rho <= endRho) {
-        lengthLambda = rho / lengthRatio;
-        std::cout << lengthLambda << std::endl;
-        auto arrivals = generateArrivals(1000);
-        auto departures = generateDepartures(arrivals, 1000);
+        arrivalLambda = rho * arrivalRatio;
+        auto arrivals = generateArrivals(T);
+        auto departures = generateDepartures(arrivals, T, queueSize);
+        auto observers = generateObservers(T);
 
-        std::cout << "Arrival count: " << arrivals.size() << ", departure count: " << departures.size() << std::endl;
+        std::vector<Event> events = arrivals;
+        events.insert(events.end(), departures.begin(), departures.end());
+        events.insert(events.end(), observers.begin(), observers.end());
 
+        std::sort(std::begin(events), 
+                  std::end(events),
+                  [](Event a, Event b) { return a.timestamp < b.timestamp; });
+
+        
         rho += incrementRho;
+
+        auto result = runDes(events, T, queueSize);
+        std::cout << "Rho: " << rho << ", Packet loss: " << result.packetLoss / arrivals.size() << ", Queue Size: " << result.queueSizeTotal / observers.size() << ", idleTimeTotal: " << result.idleTimeTotal / observers.size()  << std::endl;
     }    
 }
