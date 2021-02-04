@@ -6,6 +6,9 @@
 #include <deque>
 #include <functional>
 #include <algorithm>
+#include <string>
+#include <fstream>
+#include <chrono>
 
 enum EventType { ARRIVAL, DEPARTURE, OBSERVER };
 
@@ -34,28 +37,35 @@ public:
 };
 
 struct Result {
+    double rho;
     double packetLoss;
     double queueSizeTotal;
     double idleTimeTotal;
 
     Result() {
+        rho = 0;
         packetLoss = 0;
         queueSizeTotal = 0;
         idleTimeTotal = 0;
     };
 };
 
-double startRho = 0.95;
+double startRho = 0.25;
 double endRho = 0.95;
 double incrementRho = 0.10;
 double arrivalRatio = 500;
-double T = 5000;
+double T = 1000;
 double queueSize = 0;
 double arrivalLambda = 0;
 double lengthLambda = 0.0005;
 double c = 1000000;
-std::default_random_engine generator;
+std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());;
+
 std::uniform_real_distribution<double> distribution(0.0, 1.0);
+
+void printResults(Result result) {
+        std::cout  << "Rho: " << result.rho << ", Packet loss: " << result.packetLoss << ", Queue Size: " << result.queueSizeTotal << ", idleTimeTotal: " << result.idleTimeTotal << std::endl;
+}
 
 double exponentialValue(double lambda, double uniform) {
     return -(1 / lambda) * log(1 - uniform); 
@@ -159,7 +169,7 @@ std::vector<Event>generateObservers(int simulationTime) {
     return observerEvents; 
 }
 
-Result runDes(std::vector<Event> events, int simulationTime, int size) {
+Result runDes(std::vector<Event> events, int simulationTime, int size, int arrivalsSize, int observersSize) {
     std::deque<Event> queue;
 
     for (auto e: events) {
@@ -198,33 +208,139 @@ Result runDes(std::vector<Event> events, int simulationTime, int size) {
         previousTime = event.timestamp; 
     }
 
+    result.packetLoss /= arrivalsSize;
+    result.queueSizeTotal /= observersSize;
+    result.idleTimeTotal /= observersSize;
+
     return result;
 }
 
-int main() {
+bool isStable(double v1, double v2) {
+    if (v2 < 0.005) { return true; }
 
-    std::cout << "hello world" << std::endl;
-
-    double rho = startRho;
-
-    while (rho <= endRho) {
-        arrivalLambda = rho * arrivalRatio;
-        auto arrivals = generateArrivals(T);
-        auto departures = generateDepartures(arrivals, T, queueSize);
-        auto observers = generateObservers(T);
-
-        std::vector<Event> events = arrivals;
-        events.insert(events.end(), departures.begin(), departures.end());
-        events.insert(events.end(), observers.begin(), observers.end());
-
-        std::sort(std::begin(events), 
-                  std::end(events),
-                  [](Event a, Event b) { return a.timestamp < b.timestamp; }); 
-
-        auto result = runDes(events, T, queueSize);
-        std::cout << (double)(arrivals.size() - departures.size()) / (double)arrivals.size() << std::endl;
-        std::cout << "Rho: " << rho << ", Packet loss: " << result.packetLoss / arrivals.size() << ", Queue Size: " << result.queueSizeTotal / observers.size() << ", idleTimeTotal: " << result.idleTimeTotal / observers.size()  << std::endl;
-        
-        rho += incrementRho;
-    }    
+    return abs((v1 - v2) / v2) < 0.04;
 }
+
+bool isStable(Result r1, Result r2) {
+    return isStable(r1.packetLoss, r2.packetLoss) &&
+           isStable(r1.queueSizeTotal, r2.queueSizeTotal) &&
+           isStable(r1.idleTimeTotal, r2.idleTimeTotal);
+}
+
+void outputGraphTxt1(std::vector<Result> results, std::string filename) {
+    std::ofstream txtOut;
+    txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
+    for (auto result: results) {
+        txtOut << result.rho << " " << result.queueSizeTotal << std::endl;
+    }
+    txtOut.close();
+}
+
+void outputGraphTxt2(std::vector<Result> results, std::string filename) {
+    std::ofstream txtOut;
+    txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
+    for (auto result: results) {
+        txtOut << result.rho << " " << result.idleTimeTotal << std::endl;
+    }
+    txtOut.close();
+}
+
+void outputGraphTxt3(std::vector<Result> results, std::string filename, bool shouldTruncate) {
+    std::ofstream txtOut;
+    if (shouldTruncate) {
+        txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
+    } else {
+        txtOut.open(filename);
+    }
+    for (auto result: results) {
+        txtOut << result.rho << " " << result.packetLoss << std::endl;
+    }
+    txtOut.close();
+}
+
+void outputGraphTxt4(std::vector<Result> results, std::string filename, bool shouldTruncate) {
+    std::ofstream txtOut;
+    if (shouldTruncate) {
+        txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
+    } else { 
+        txtOut.open(filename);
+        txtOut << std::endl;
+        txtOut << std::endl;
+    }
+    for (auto result: results) {
+        txtOut << result.rho << " " << result.queueSizeTotal << std::endl;
+    }
+    txtOut.close();
+}
+
+std::vector<Result> runSimulation() {
+    bool stable = false;
+    Result prevResult;
+    std::vector<Result> results;
+    T = 1000;
+
+    while (!stable) {
+        double rho = startRho;
+        results.clear();
+        while (rho <= endRho + 0.05) {
+            std::cout << rho << std::endl;
+            arrivalLambda = rho * arrivalRatio;
+            auto arrivals = generateArrivals(T);
+            auto departures = generateDepartures(arrivals, T, queueSize);
+            auto observers = generateObservers(T);
+
+            std::vector<Event> events = arrivals;
+            events.insert(events.end(), departures.begin(), departures.end());
+            events.insert(events.end(), observers.begin(), observers.end());
+
+            std::sort(std::begin(events),
+                      std::end(events),
+                      [](Event a, Event b) { return a.timestamp < b.timestamp; });
+            auto result = runDes(events, T, queueSize, arrivals.size(), observers.size());
+            result.rho = rho;
+
+            results.push_back(result);
+            if (rho > endRho - 0.05) {
+                stable = isStable(prevResult, result);
+                std::cout << "Queue Size: " << queueSize << ", T: " << T << ", stable: " << stable << std::endl;
+                printResults(result);
+                prevResult = result;
+            }
+
+            rho += incrementRho;
+        }
+
+        T += 1000;
+    }
+    return results;
+}
+
+void runSimulation(int t_queueSize) {
+    queueSize = t_queueSize;
+    auto results = runSimulation();
+    outputGraphTxt3(results, "q6_dataPacketLoss", t_queueSize == 10);
+    outputGraphTxt4(results, "q6_dataEn", t_queueSize == 10);
+}
+
+int main(int argc, char* argv[]) {
+
+    int mode = strtol(argv[1], NULL, 10);
+    if (mode == 0) {
+        startRho = 0.25;
+        endRho = 0.95;
+    } else {
+        startRho = 0.5;
+        endRho = 1.5;
+    }
+
+    if (mode == 1) {
+        runSimulation(10);
+        runSimulation(25);
+        runSimulation(50);
+    } else {
+        auto results = runSimulation();
+        outputGraphTxt1(results, "q3_data1");
+        outputGraphTxt2(results, "q3_data2");
+    }
+}
+
