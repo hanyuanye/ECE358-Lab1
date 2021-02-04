@@ -45,12 +45,12 @@ struct Result {
     };
 };
 
-double startRho = 0.25;
+double startRho = 0.95;
 double endRho = 0.95;
 double incrementRho = 0.10;
 double arrivalRatio = 500;
 double T = 5000;
-double queueSize = 10;
+double queueSize = 0;
 double arrivalLambda = 0;
 double lengthLambda = 0.0005;
 double c = 1000000;
@@ -99,6 +99,10 @@ std::vector<Event> generateDepartures(std::vector<Event> arrivals, int simulatio
 
 std::vector<Event> generateDepartures(std::vector<Event> arrivals, int simulationTime, int queueSize) {
 
+    if (queueSize == 0) {
+        return generateDepartures(arrivals, simulationTime);
+    }
+
     std::deque<Event> eventQueue;
 
     for (auto c: arrivals) {
@@ -136,8 +140,6 @@ std::vector<Event> generateDepartures(std::vector<Event> arrivals, int simulatio
 
         // add next packet to packet queue
         packetQueue.push_back(next);
-
-        currTime = next.timestamp;
     }
 
     return departures;
@@ -188,7 +190,7 @@ Result runDes(std::vector<Event> events, int simulationTime, int size) {
         case OBSERVER:
             result.queueSizeTotal += currentQueueSize;
             if (currentQueueSize == 0) {
-                result.idleTimeTotal += event.timestamp - previousTime;
+                result.idleTimeTotal += 1;
             }
             break;
         }
@@ -217,12 +219,12 @@ int main() {
 
         std::sort(std::begin(events), 
                   std::end(events),
-                  [](Event a, Event b) { return a.timestamp < b.timestamp; });
-
-        
-        rho += incrementRho;
+                  [](Event a, Event b) { return a.timestamp < b.timestamp; }); 
 
         auto result = runDes(events, T, queueSize);
+        std::cout << (double)(arrivals.size() - departures.size()) / (double)arrivals.size() << std::endl;
         std::cout << "Rho: " << rho << ", Packet loss: " << result.packetLoss / arrivals.size() << ", Queue Size: " << result.queueSizeTotal / observers.size() << ", idleTimeTotal: " << result.idleTimeTotal / observers.size()  << std::endl;
+        
+        rho += incrementRho;
     }    
 }
