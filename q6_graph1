@@ -1,0 +1,16 @@
+set title "Packet Loss vs Utilization"
+set xlabel "Utilization"
+set ylabel "Probability of packet loss"
+set xrange [0:1.5]
+set yrange [0:0.5]
+# position the 'key' or 'legend'
+set key center right
+set key spacing 2
+# output to a png file
+set term png
+set output "q6_graph1.png"
+# "index" refers to which dataset in the file to plot
+#  Note that we use different markers for each dataset
+plot 'q6_dataPacketLoss' index 0 title "k=10" with linespoint pointtype 5, \
+'q6_dataPacketLoss' index 1 title "k=25" with linespoint pointtype 6, \
+'q6_dataPacketLoss' index 2 title "k=50" with linespoint pointtype 7

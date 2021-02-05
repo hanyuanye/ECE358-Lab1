@@ -259,6 +259,8 @@ void outputGraphTxt3(std::vector<Result> results, std::string filename, bool sho
         txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
     } else {
         txtOut.open(filename, std::ofstream::out | std::ofstream::app);    
+        txtOut << std::endl;
+        txtOut << std::endl;
     }
     for (auto result: results) {
         txtOut << result.rho << " " << result.packetLoss << std::endl;
