@@ -1,6 +1,6 @@
-set title "Average Number of Packets in Queue vs Utilization"
+set title "Average Idle Time vs Utilization"
 set xlabel "Utilization"
-set ylabel "Average Number of Packets in Queue"
+set ylabel "Average Idle Time"
        
 set xrange [0:1]
 set yrange [0:1]
