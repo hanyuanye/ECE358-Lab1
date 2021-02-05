@@ -150,6 +150,9 @@ std::vector<Event> generateDepartures(std::vector<Event> arrivals, int simulatio
 
         // add next packet to packet queue
         packetQueue.push_back(next);
+        if (packetQueue.size() == 1) {
+            currTime = packetQueue.front().timestamp;
+        }
     }
 
     return departures;
@@ -180,6 +183,8 @@ Result runDes(std::vector<Event> events, int simulationTime, int size, int arriv
     int currentQueueSize = 0;
     double previousTime = 0;
 
+    int departureCount = 0;
+    int arrivalCount = 0;
     while (queue.size() > 0) {
         auto event = queue.front();
         queue.pop_front();
@@ -191,14 +196,17 @@ Result runDes(std::vector<Event> events, int simulationTime, int size, int arriv
             if (size > 0 && currentQueueSize == size) {
                 result.packetLoss += 1;
             } else {
+                arrivalCount += 1;
                 currentQueueSize += 1;
             }
             break;
         case DEPARTURE:
             currentQueueSize -= 1;
+            departureCount += 1;
             break;
         case OBSERVER:
             result.queueSizeTotal += currentQueueSize;
+
             if (currentQueueSize == 0) {
                 result.idleTimeTotal += 1;
             }
@@ -250,7 +258,7 @@ void outputGraphTxt3(std::vector<Result> results, std::string filename, bool sho
     if (shouldTruncate) {
         txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
     } else {
-        txtOut.open(filename);
+        txtOut.open(filename, std::ofstream::out | std::ofstream::app);    
     }
     for (auto result: results) {
         txtOut << result.rho << " " << result.packetLoss << std::endl;
@@ -263,7 +271,7 @@ void outputGraphTxt4(std::vector<Result> results, std::string filename, bool sho
     if (shouldTruncate) {
         txtOut.open(filename, std::ofstream::out | std::ofstream::trunc);
     } else { 
-        txtOut.open(filename);
+        txtOut.open(filename, std::ofstream::out | std::ofstream::app);
         txtOut << std::endl;
         txtOut << std::endl;
     }
@@ -283,7 +291,6 @@ std::vector<Result> runSimulation() {
         double rho = startRho;
         results.clear();
         while (rho <= endRho + 0.05) {
-            std::cout << rho << std::endl;
             arrivalLambda = rho * arrivalRatio;
             auto arrivals = generateArrivals(T);
             auto departures = generateDepartures(arrivals, T, queueSize);
@@ -296,9 +303,23 @@ std::vector<Result> runSimulation() {
             std::sort(std::begin(events),
                       std::end(events),
                       [](Event a, Event b) { return a.timestamp < b.timestamp; });
+            
+            int count = 0;
+            for (auto event: events) {
+                std::string str;
+                if (event.type == ARRIVAL) {
+                    count += 1;
+                    str = "Arrival";
+                } else if (event.type == DEPARTURE) {
+                    count -= 1;
+                    str = "Departure";
+                }
+
+           //     std::cout << "count: " << count << " timestamp: " << event.timestamp << " type: " << str << std::endl;
+            }
             auto result = runDes(events, T, queueSize, arrivals.size(), observers.size());
             result.rho = rho;
-
+            printResults(result);
             results.push_back(result);
             if (rho > endRho - 0.05) {
                 stable = isStable(prevResult, result);
