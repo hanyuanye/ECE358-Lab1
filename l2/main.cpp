@@ -185,12 +185,18 @@ void write(std::vector<Result> results, std::string filename) {
     txtOut.open(filename + "Ef", std::ofstream::out | std::ofstream::trunc);
     for (auto result: results) {
         txtOut << result.n << " " << result.efficiency << std::endl;
+        if (result.n == 100) {
+            txtOut << std::endl << std::endl;
+        }
     }
     txtOut.close();
 
     txtOut.open(filename + "Th", std::ofstream::out | std::ofstream::trunc);
     for (auto result: results) {
         txtOut << result.n << " " << result.throughput << std::endl;
+        if (result.n == 100) {
+            txtOut << std::endl << std::endl;
+        }
     }
     txtOut.close();
 }
