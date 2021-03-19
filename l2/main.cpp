@@ -31,7 +31,7 @@ double exponentialValue(double lambda) {
 }
 
 double backoff(int n) {
-    std::uniform_int_distribution<int> int_distribution(0, pow(2, n));
+    std::uniform_int_distribution<int> int_distribution(0, pow(2, n) - 1);
     int randVal = int_distribution(generator);
     return (double)randVal * 512.0 / 1000000.0;
 }
@@ -42,7 +42,7 @@ std::deque<double> generateFrames(double lambda) {
 
     while (currTime < T) {
         double nextTime = currTime + exponentialValue(lambda);
-        frames.push_back(nextTime);
+        frames.push_back(nextTime + T_TRANS);
         currTime = nextTime;
     }
 
@@ -80,20 +80,21 @@ public:
         frames = generateFrames(lambda);
     }
 
-    void handleCollision() {
+    void handleCollision(double lastBit) {
         collisionCount += 1;
         if (collisionCount > 10) {
             collisionCount = 0;
             frames.pop_front();
-            nextFrame = std::max(nextFrame, frames.front());
+            if (!frames.empty()) {
+                nextFrame = std::max(nextFrame, frames.front());
+            }
         } else {
-            nextFrame += backoff(collisionCount);
+            nextFrame = lastBit + backoff(collisionCount);
         }
     }
 
     void senderCollision(double max_delay) {
-        handleCollision();
-        nextFrame = max_delay;
+        handleCollision(max_delay);
     }
 
     void senseBusy(double start, double end) {
@@ -118,9 +119,10 @@ public:
 
     void sendSuccessfully() {
         collisionCount = 0;
-        frames.pop_front();
-        nextFrame = std::max(nextFrame + T_TRANS, frames.front());
         transmitted++;
+        frames.pop_front();
+        if (frames.empty()) { return; }
+        nextFrame = std::max(nextFrame + T_TRANS, frames.front());
     }
 };
 
@@ -165,9 +167,9 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
             double lastBit = arrivalTime + T_TRANS;
 
             // collision case
-            if (node.nextFrame < arrivalTime) {
+            if (node.nextFrame <= arrivalTime) {
                 maxCollidingDistance = std::max(distance, maxCollidingDistance);
-                node.handleCollision();
+                node.handleCollision(lastBit);
                 transmissionAttempts++;  
             } else {
                 node.senseBusy(arrivalTime, lastBit);
@@ -175,7 +177,7 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         }
 
         if (maxCollidingDistance >= 0) {
-            minNode.senderCollision(minNode.nextFrame + T_TRANS + maxCollidingDistance * T_PROP); 
+            minNode.senderCollision(minNode.nextFrame + maxCollidingDistance * T_PROP); 
         } else {
             minNode.sendSuccessfully(); 
         }
