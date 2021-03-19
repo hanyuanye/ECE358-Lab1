@@ -1,0 +1,16 @@
+set title "Throughput vs Nodes"
+set xlabel "Nodes"
+set ylabel "Throughput"
+set xrange [0:100]
+set yrange [0:1.0]
+# position the 'key' or 'legend'
+set key center right
+set key spacing 2
+# output to a png file
+set term png
+set output "NpersistentTh.png"
+# "index" refers to which dataset in the file to plot
+#  Note that we use different markers for each dataset
+plot 'NpersistentTh' index 0 title "A=7" with linespoint pointtype 5, \
+'NpersistentTh' index 1 title "A=10" with linespoint pointtype 6, \
+'NpersistentTh' index 2 title "A=20" with linespoint pointtype 7
