@@ -70,22 +70,22 @@ public:
     int pos;
     int collisionCount;
     double nextFrame;
-    int frameCount;
+    std::deque<double> frames;
 
     Node(int t_lambda, int t_pos) {
         lambda = t_lambda;
         pos = t_pos;
         collisionCount = 0;
         nextFrame = exponentialValue(lambda);
-        frameCount = generateFrames(lambda).size();
+        frames = generateFrames(lambda);
     }
 
     void handleCollision() {
         collisionCount += 1;
         if (collisionCount > 10) {
             collisionCount = 0;
-            nextFrame += exponentialValue(lambda);
-            frameCount --;
+            frames.pop_front();
+            nextFrame = std::max(nextFrame, frames.front());
         } else {
             nextFrame += backoff(collisionCount);
         }
@@ -106,7 +106,9 @@ public:
                 
                 if (attempt > 11) {
                     transmissionAttempts += 1;
-                    frameCount --;           
+                    frames.pop_front();
+                    collisionCount = 0;
+                    nextFrame = std::max(frames.front(), nextFrame);           
                 }
             } else {
                 nextFrame = end; //TODO: add backoff
@@ -116,8 +118,9 @@ public:
 
     void sendSuccessfully() {
         collisionCount = 0;
-        nextFrame += exponentialValue(lambda);
-        frameCount --;
+        frames.pop_front();
+        nextFrame = std::max(nextFrame + T_TRANS, frames.front());
+        transmitted++;
     }
 };
 
@@ -138,7 +141,7 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         // Retrieve next event
         int minIdx = 0;
         for (int i = 0; i < nodes.size(); i++) {
-            if (nodes[i].frameCount <= 0) { continue; }
+            if (nodes[i].frames.size() <= 0) { continue; }
             if (nodes[i].nextFrame < nodes[minIdx].nextFrame) {
                 minIdx = i;
             }
@@ -154,7 +157,7 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         bool dropPacket = false;
         
         for (auto &node: nodes) {
-            if (node.frameCount <= 0 || node.pos == minNode.pos) { continue; }
+            if (node.frames.size() <= 0 || node.pos == minNode.pos) { continue; }
 
             int distance = abs(minNode.pos - node.pos);
             double sendingTime = minNode.nextFrame;
@@ -164,8 +167,8 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
             // collision case
             if (node.nextFrame < arrivalTime) {
                 maxCollidingDistance = std::max(distance, maxCollidingDistance);
-                node.handleCollision();  
-                transmissionAttempts ++;
+                node.handleCollision();
+                transmissionAttempts++;  
             } else {
                 node.senseBusy(arrivalTime, lastBit);
             }
@@ -173,22 +176,18 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
 
         if (maxCollidingDistance >= 0) {
             minNode.senderCollision(minNode.nextFrame + T_TRANS + maxCollidingDistance * T_PROP); 
-        } else if (!dropPacket){
-            transmitted ++;
-            //std::cout << transmitted << " " << minNode.nextFrame << " " << transmissionAttempts << std::endl;
+        } else {
             minNode.sendSuccessfully(); 
         }
     }
 
     for (auto node: nodes) {
-        if (node.frameCount < 0) {
-            std::cout << node.frameCount << std::endl;
-        }
-        transmissionAttempts += node.frameCount;
+        transmissionAttempts += node.frames.size();
     } 
 
     double efficiency = (double)transmitted / (double)transmissionAttempts;
     double throughput = (double)transmitted * T_TRANS / simulationTime;
+//    std::cout << nodes.size() << " " << efficiency << " " << throughput << " " << transmitted << " " << transmissionAttempts << std::endl;
     return Result(efficiency, throughput);
 }
 
