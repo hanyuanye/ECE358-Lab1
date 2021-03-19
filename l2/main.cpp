@@ -36,6 +36,19 @@ double backoff(int n) {
     return (double)randVal * 512.0 / 1000000.0;
 }
 
+std::deque<double> generateFrames(double lambda) {
+    double currTime = 0;
+    std::deque<double> frames;
+
+    while (currTime < T) {
+        double nextTime = currTime + exponentialValue(lambda);
+        frames.push_back(nextTime);
+        currTime = nextTime;
+    }
+
+    return frames;
+}
+
 class Result {
 public:
     int a;
@@ -57,12 +70,14 @@ public:
     int pos;
     int collisionCount;
     double nextFrame;
+    int frameCount;
 
     Node(int t_lambda, int t_pos) {
         lambda = t_lambda;
         pos = t_pos;
         collisionCount = 0;
         nextFrame = exponentialValue(lambda);
+        frameCount = generateFrames(lambda).size();
     }
 
     void handleCollision() {
@@ -70,6 +85,7 @@ public:
         if (collisionCount > 10) {
             collisionCount = 0;
             nextFrame += exponentialValue(lambda);
+            frameCount --;
         } else {
             nextFrame += backoff(collisionCount);
         }
@@ -80,25 +96,28 @@ public:
         nextFrame = max_delay;
     }
 
-    bool senseBusy(double start, double end, int attempt) {
+    void senseBusy(double start, double end) {
         if (start <= nextFrame && nextFrame < end) {
             if(nPersistant) {
-                if (attempt == 1) {
-                    nextFrame = end + backoff(attempt);
-                } else {
+                int attempt = 1;
+                while (attempt <= 11 && nextFrame < end) {
                     nextFrame += backoff(attempt);
+                }
+                
+                if (attempt > 11) {
+                    transmissionAttempts += 1;
+                    frameCount --;           
                 }
             } else {
                 nextFrame = end; //TODO: add backoff
             }
-            return true;
         }
-        return false;
     }
 
     void sendSuccessfully() {
         collisionCount = 0;
         nextFrame += exponentialValue(lambda);
+        frameCount --;
     }
 };
 
@@ -119,6 +138,7 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         // Retrieve next event
         int minIdx = 0;
         for (int i = 0; i < nodes.size(); i++) {
+            if (nodes[i].frameCount <= 0) { continue; }
             if (nodes[i].nextFrame < nodes[minIdx].nextFrame) {
                 minIdx = i;
             }
@@ -134,7 +154,7 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         bool dropPacket = false;
         
         for (auto &node: nodes) {
-            if (node.pos == minNode.pos) { continue; }
+            if (node.frameCount <= 0 || node.pos == minNode.pos) { continue; }
 
             int distance = abs(minNode.pos - node.pos);
             double sendingTime = minNode.nextFrame;
@@ -147,21 +167,7 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
                 node.handleCollision();  
                 transmissionAttempts ++;
             } else {
-                if(nPersistant){
-                    // do 10 attempts and drop packet if not successful after
-                    for (int attempt = 1; attempt <=11; attempt ++){
-                        if (attempt == 11){
-                            dropPacket = true;
-                            break;
-                        }
-                        if (!node.senseBusy(arrivalTime, lastBit, attempt)){
-                            
-                            break; 
-                        }
-                    } 
-                } else {
-                    node.senseBusy(arrivalTime, lastBit, 1);     
-                }
+                node.senseBusy(arrivalTime, lastBit);
             }
         }
 
@@ -173,6 +179,13 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
             minNode.sendSuccessfully(); 
         }
     }
+
+    for (auto node: nodes) {
+        if (node.frameCount < 0) {
+            std::cout << node.frameCount << std::endl;
+        }
+        transmissionAttempts += node.frameCount;
+    } 
 
     double efficiency = (double)transmitted / (double)transmissionAttempts;
     double throughput = (double)transmitted * T_TRANS / simulationTime;
