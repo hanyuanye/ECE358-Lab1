@@ -15,6 +15,8 @@ double c = 3 * pow(10, 8);
 double T_PROP = 10.0 / (2.0 / 3.0 * c);
 double T_TRANS = 1500.0 / 1000000.0;
 
+bool nPersistant = false;
+
 int transmissionAttempts = 0;
 int transmitted = 0;
 
@@ -28,8 +30,8 @@ double exponentialValue(double lambda) {
     return -(1 / lambda) * log(1 - uniform);
 }
 
-double backoff(int collisions) {
-    std::uniform_int_distribution<int> int_distribution(0, pow(2, collisions));
+double backoff(int n) {
+    std::uniform_int_distribution<int> int_distribution(0, pow(2, n));
     int randVal = int_distribution(generator);
     return (double)randVal * 512.0 / 1000000.0;
 }
@@ -78,10 +80,20 @@ public:
         nextFrame = max_delay;
     }
 
-    void senseBusy(double start, double end) {
+    bool senseBusy(double start, double end, int attempt) {
         if (start <= nextFrame && nextFrame < end) {
-            nextFrame = end;
+            if(nPersistant) {
+                if (attempt == 1) {
+                    nextFrame = end + backoff(attempt);
+                } else {
+                    nextFrame += backoff(attempt);
+                }
+            } else {
+                nextFrame = end; //TODO: add backoff
+            }
+            return true;
         }
+        return false;
     }
 
     void sendSuccessfully() {
@@ -118,7 +130,9 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         int maxCollidingDistance = -1;
 
         transmissionAttempts ++;
-
+        
+        bool dropPacket = false;
+        
         for (auto &node: nodes) {
             if (node.pos == minNode.pos) { continue; }
 
@@ -133,13 +147,27 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
                 node.handleCollision();  
                 transmissionAttempts ++;
             } else {
-                node.senseBusy(arrivalTime, lastBit);
+                if(nPersistant){
+                    // do 10 attempts and drop packet if not successful after
+                    for (int attempt = 1; attempt <=11; attempt ++){
+                        if (attempt == 11){
+                            dropPacket = true;
+                            break;
+                        }
+                        if (!node.senseBusy(arrivalTime, lastBit, attempt)){
+                            
+                            break; 
+                        }
+                    } 
+                } else {
+                    node.senseBusy(arrivalTime, lastBit, 1);     
+                }
             }
         }
 
         if (maxCollidingDistance >= 0) {
             minNode.senderCollision(minNode.nextFrame + T_TRANS + maxCollidingDistance * T_PROP); 
-        } else {
+        } else if (!dropPacket){
             transmitted ++;
             //std::cout << transmitted << " " << minNode.nextFrame << " " << transmissionAttempts << std::endl;
             minNode.sendSuccessfully(); 
@@ -201,10 +229,7 @@ void write(std::vector<Result> results, std::string filename) {
     txtOut.close();
 }
 
-int main() {
-    clear("persistentEf");
-    clear("persistentTh");
-
+int sim(std::string fileName){
     std::vector<int> A {7, 10, 20};
     std::vector<int> N {20, 40, 60, 80, 100};
 
@@ -217,7 +242,7 @@ int main() {
                 results.push_back(result);
                 if (result.a == 20 && result.n == 100) {
                     if (isStable(prev, result)) {
-                        write(results, "persistent");
+                        write(results, fileName);
                         std::cout << "Stable" << std::endl;
                         return 0;
                     } else {
@@ -231,6 +256,18 @@ int main() {
         }
     } 
     createSimulation(7, 20);
+}
+
+int main() {
+    clear("persistentEf");
+    clear("persistentTh");
+    clear("NpersistentEf");
+    clear("NpersistentTh");
+    sim("persistent");
+    
+    nPersistant = true;
+    
+    sim("Npersistent");
 }
 
 
