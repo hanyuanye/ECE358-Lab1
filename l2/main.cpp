@@ -19,6 +19,10 @@ bool nPersistant = false;
 
 int transmissionAttempts = 0;
 int transmitted = 0;
+int droppedSensePackets = 0;
+int droppedCollisionPackets = 0;
+int collisionTransmissions = 0;
+
 
 std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());;
 std::uniform_real_distribution<double> distribution(0.0, 1.0);
@@ -81,10 +85,12 @@ public:
     }
 
     void handleCollision(double lastBit) {
+        collisionTransmissions++;
         collisionCount += 1;
         if (collisionCount > 10) {
             collisionCount = 0;
             frames.pop_front();
+            droppedCollisionPackets++;
             if (!frames.empty()) {
                 nextFrame = std::max(nextFrame, frames.front());
             }
@@ -103,10 +109,12 @@ public:
                 int attempt = 1;
                 while (attempt <= 11 && nextFrame < end) {
                     nextFrame += backoff(attempt);
+                    attempt ++;
                 }
                 
                 if (attempt > 11) {
                     transmissionAttempts += 1;
+                    droppedSensePackets ++;
                     frames.pop_front();
                     collisionCount = 0;
                     nextFrame = std::max(frames.front(), nextFrame);           
@@ -183,9 +191,12 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
         }
     }
 
-    for (auto node: nodes) {
-        transmissionAttempts += node.frames.size();
-    } 
+//    for (auto node: nodes) {
+//        transmissionAttempts += node.frames.size();
+//    }
+
+    transmissionAttempts += droppedSensePackets;
+    transmissionAttempts += droppedCollisionPackets; 
 
     double efficiency = (double)transmitted / (double)transmissionAttempts;
     double throughput = (double)transmitted * T_TRANS / simulationTime;
@@ -196,12 +207,16 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
 Result createSimulation(int avgPackets, int numNodes) {
     transmitted = 0;
     transmissionAttempts = 0;
+    droppedSensePackets = 0;
+    droppedCollisionPackets = 0;
+    collisionTransmissions = 0;
     auto nodes = generateNodes(avgPackets, numNodes);
 
     auto result = simulate(T, nodes);
     result.a = avgPackets;
     result.n = numNodes;
 
+    std::cout << droppedSensePackets << " " << droppedCollisionPackets << " " << collisionTransmissions << " " << transmitted << " " << transmissionAttempts << std::endl;
     std::cout << T << " " << result.a << " " << result.n << " " << result.efficiency << " " << result.throughput << std::endl;
     return result; 
 }
@@ -269,7 +284,6 @@ int sim(std::string fileName){
             }
         }
     } 
-    createSimulation(7, 20);
 }
 
 int main() {
