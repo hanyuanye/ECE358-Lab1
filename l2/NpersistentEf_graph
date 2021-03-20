@@ -2,7 +2,7 @@ set title "Efficiency vs Nodes"
 set xlabel "Nodes"
 set ylabel "Efficiency"
 set xrange [0:100]
-set yrange [0:1.0]
+set yrange [0.97:1.0]
 # position the 'key' or 'legend'
 set key center right
 set key spacing 2
