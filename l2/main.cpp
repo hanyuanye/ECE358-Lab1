@@ -195,7 +195,6 @@ Result simulate(double simulationTime, std::vector<Node> nodes) {
 //        transmissionAttempts += node.frames.size();
 //    }
 
-    transmissionAttempts += droppedSensePackets;
     transmissionAttempts += droppedCollisionPackets; 
 
     double efficiency = (double)transmitted / (double)transmissionAttempts;
@@ -216,7 +215,7 @@ Result createSimulation(int avgPackets, int numNodes) {
     result.a = avgPackets;
     result.n = numNodes;
 
-    std::cout << droppedSensePackets << " " << droppedCollisionPackets << " " << collisionTransmissions << " " << transmitted << " " << transmissionAttempts << std::endl;
+//    std::cout << droppedSensePackets << " " << droppedCollisionPackets << " " << collisionTransmissions << " " << transmitted << " " << transmissionAttempts << std::endl;
     std::cout << T << " " << result.a << " " << result.n << " " << result.efficiency << " " << result.throughput << std::endl;
     return result; 
 }
